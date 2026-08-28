@@ -199,13 +199,15 @@ h1,h2,h3,h4{margin:0;font-family:'Archivo',system-ui,sans-serif;font-weight:700;
 .rest-time{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:20px;font-variant-numeric:tabular-nums;line-height:1}
 .rest-btn{border:1px solid color-mix(in srgb,var(--invert-fg) 30%,transparent);border-radius:8px;height:32px;padding:0 9px;
   font-size:12.5px;font-weight:700;color:var(--invert-fg)}
-/* Estado en reposo: barra discreta que arranca el descanso cuando la tocás. */
-.rest-inner.idle{background:var(--surface);color:var(--ink-2);border-color:var(--line-2);
-  width:100%;text-align:left;padding:10px 13px}
-.rest-inner.idle .rest-label{opacity:1;color:var(--ink-3)}
-.rest-idle-time{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums}
-.rest-play{width:26px;height:26px;flex:none;border-radius:50%;background:var(--accent);display:grid;place-items:center}
-.rest-play svg{width:13px;height:13px;fill:var(--accent-ink);stroke:none;margin-left:2px}
+/* En reposo: play + reloj editable + ajuste de 15 en 15. Nunca arranca solo. */
+.rest-inner.idle{background:var(--surface);color:var(--ink);border-color:var(--line-2);padding:8px 10px;gap:9px}
+.rest-play{width:42px;height:42px;flex:none;border-radius:50%;background:var(--accent);display:grid;place-items:center;border:0}
+.rest-play svg{width:16px;height:16px;fill:var(--accent-ink);stroke:none;margin-left:3px}
+.rest-clock{flex:1;min-width:0;text-align:left;background:none;border:0;padding:0 2px}
+.rest-clock .rest-label{display:block;opacity:1;color:var(--ink-3)}
+.rest-idle-time{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:20px;color:var(--ink);
+  font-variant-numeric:tabular-nums;line-height:1.2;border-bottom:1px dashed var(--line-2)}
+.rest-inner.idle .rest-btn{color:var(--ink-2);border-color:var(--line-2);background:var(--surface-2);height:38px;padding:0 10px}
 
 /* ---------- history ---------- */
 .hrow{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:var(--surface);
@@ -383,7 +385,7 @@ function relDays(ts){var d=Math.round((dayStart(Date.now())-dayStart(ts))/864000
   if(d<14)return 'hace 1 semana';if(d<60)return 'hace '+Math.round(d/7)+' semanas';return 'hace '+Math.round(d/30)+' meses';}
 
 /* ============================== estado ============================== */
-var LS_DB='romgym.db.v1', LS_ACTIVE='romgym.active.v1', LS_VIEW='romgym.view.v1';
+var LS_DB='romgym.db.v1', LS_ACTIVE='romgym.active.v1', LS_VIEW='romgym.view.v1', LS_REST='romgym.rest.v1';
 var state={db:null,active:null,view:'hoy',cloud:undefined,dirty:false,rest:null,tickT:null,restT:null,progressEx:null,histOpen:null};
 
 function blankDb(){return{v:1,routines:seedRoutines(),routinesAt:0,sessions:[],deleted:[],
@@ -768,7 +770,7 @@ function toggleDone(i,j){
     var mine=e1rm(setWeight(e,s),num(s.r));
     s.done=true;s.ts=Date.now();
     s.pr=(before>0&&mine>before*1.0001);
-    if(!state.active.editing){startRest();if(s.pr)toast('¡Récord en '+e.name+'!');}
+    if(!state.active.editing&&s.pr)toast('¡Récord en '+e.name+'!');
   }else{
     s.done=false;s.pr=false;
     /* Al desmarcar, lo que se había tomado del gris vuelve a gris. */
@@ -786,18 +788,46 @@ function redrawExercise(i){
 
 /* ---------- descanso ---------- */
 function startRest(dur){
-  var d=dur||state.db.settings.rest||0;if(!d)return;
-  state.rest={end:Date.now()+d*1000,total:d};renderRest();
+  var d=dur||restDefault();if(!d)return;
+  state.rest={end:Date.now()+d*1000,total:d};saveRest();renderRest();
   clearInterval(state.restT);state.restT=setInterval(tickRest,250);
 }
 function restDefault(){return state.db.settings.rest||120;}
+/* El tiempo que dejes es el que queda para la próxima. */
+function setRestDefault(v){
+  state.db.settings.rest=clamp(Math.round(v/5)*5,15,1800);
+  state.db.settingsAt=Date.now();markDirty();renderRest();
+  if(state.view==='rutinas')render();
+}
+function saveRest(){
+  try{state.rest?localStorage.setItem(LS_REST,JSON.stringify(state.rest)):localStorage.removeItem(LS_REST);}catch(e){}
+}
+var restEdit=0;
+function openRestEditor(){restEdit=restDefault();renderRestEditor();}
+function renderRestEditor(){
+  var m=Math.floor(restEdit/60),s=restEdit%60;
+  var chips=[45,60,90,120,150,180,240,300];
+  var body='<div style="text-align:center;padding:2px 0 16px">'+
+    '<div style="font-family:Archivo,sans-serif;font-weight:800;font-size:46px;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums">'+fmtClock(restEdit*1000)+'</div>'+
+    '<div style="font-size:11.5px;color:var(--ink-3);margin-top:5px">minutos : segundos</div></div>'+
+    '<div class="grid2" style="margin-bottom:16px"><button class="btn" data-act="re-minus">− 15s</button><button class="btn" data-act="re-plus">+ 15s</button></div>'+
+    '<div class="field"><label>Valores rápidos</label><div style="display:flex;flex-wrap:wrap;gap:7px">'+
+    chips.map(function(c){return '<button class="btn btn-sm'+(c===restEdit?' btn-primary':'')+'" data-act="re-set" data-v="'+c+'">'+fmtClock(c*1000)+'</button>';}).join('')+
+    '</div></div>'+
+    '<div class="grid2"><div class="field"><label>Minutos</label><input type="text" inputmode="numeric" data-act="re-min" value="'+m+'"></div>'+
+    '<div class="field"><label>Segundos</label><input type="text" inputmode="numeric" data-act="re-sec" value="'+pad(s)+'"></div></div>'+
+    '<p style="margin:2px 0 0;font-size:12.5px;color:var(--ink-3);line-height:1.5">Queda guardado para la próxima vez. El cronómetro no arranca solo: lo empezás vos con ▶.</p>';
+  openSheet('Tiempo de descanso',body,
+    '<button class="btn btn-block" data-act="close-sheet">Cancelar</button>'+
+    '<button class="btn btn-primary btn-block" data-act="re-save">Guardar</button>');
+}
 function tickRest(){
   if(!state.rest)return;
   if(Date.now()>=state.rest.end){endRest(true);return;}
   renderRest();
 }
 function endRest(beep){
-  clearInterval(state.restT);state.rest=null;renderRest();
+  clearInterval(state.restT);state.rest=null;saveRest();renderRest();
   if(beep){vibrate();chime();}
 }
 function renderRest(){
@@ -814,11 +844,14 @@ function renderRest(){
       '<button class="rest-btn" data-act="rest-plus">+15s</button>'+
       '<button class="rest-btn" data-act="rest-skip">Listo</button></div></div>';
   }else{
-    html='<div class="rest" id="restBar">'+
-      '<button class="rest-inner idle" data-act="rest-start" aria-label="Empezar a contar el descanso">'+
-      '<span class="rest-play">'+IC.play+'</span>'+
-      '<span style="flex:1"><span class="rest-label" style="display:block">Descanso</span></span>'+
-      '<span class="rest-idle-time">'+fmtClock(restDefault()*1000)+'</span></button></div>';
+    html='<div class="rest" id="restBar"><div class="rest-inner idle">'+
+      '<button class="rest-play" data-act="rest-start" aria-label="Empezar el descanso">'+IC.play+'</button>'+
+      '<button class="rest-clock" data-act="rest-edit" aria-label="Cambiar el tiempo de descanso">'+
+      '<span class="rest-label">Descanso</span>'+
+      '<span class="rest-idle-time">'+fmtClock(restDefault()*1000)+'</span></button>'+
+      '<button class="rest-btn" data-act="rest-def-minus" aria-label="Quitar 15 segundos">−15s</button>'+
+      '<button class="rest-btn" data-act="rest-def-plus" aria-label="Sumar 15 segundos">+15s</button>'+
+      '</div></div>';
   }
   if(el)el.outerHTML=html;else document.body.insertAdjacentHTML('beforeend',html);
 }
@@ -1115,10 +1148,9 @@ function viewRutinas(){
   var s=state.db.settings;
   h+='<div class="section-title"><h2>Ajustes</h2></div><div class="card">'+
     '<div class="field"><label>Descanso entre series</label>'+
-    '<select class="sel" data-act="set-rest">'+[60,90,120,150,180,240].map(function(v){
-      return '<option value="'+v+'"'+(s.rest===v?' selected':'')+'>'+(v<120?v+' segundos':Math.floor(v/60)+' min'+(v%60?' '+(v%60)+'s':''))+'</option>';
-    }).join('')+'<option value="0"'+(s.rest===0?' selected':'')+'>Sin timer</option></select>'+
-    '<div class="help">Arranca solo cada vez que marcás una serie.</div></div>'+
+    '<button class="btn btn-block" data-act="rest-edit" style="justify-content:space-between">'+
+    '<span>Tiempo del cronómetro</span><span class="mono" style="font-weight:700">'+fmtClock(restDefault()*1000)+'</span></button>'+
+    '<div class="help">Durante el entrenamiento el cronómetro queda abajo. No arranca solo: lo empezás vos con ▶ y le sumás o restás 15 segundos cuando quieras.</div></div>'+
     '<div class="field"><label>Tu peso corporal (kg)</label>'+
     '<input type="text" inputmode="decimal" data-act="set-bw" value="'+esc(s.bodyweight)+'">'+
     '<div class="help">Se usa para calcular tus marcas en dominadas, fondos y flexiones, donde el kg que anotás es peso extra.</div></div>'+
@@ -1301,8 +1333,19 @@ document.addEventListener('click',function(ev){
     case 'discard': discardSession(); break;
     case 'close-sheet': closeSheet(); break;
     case 'rest-start': startRest(restDefault()); break;
-    case 'rest-plus': if(state.rest){state.rest.end+=15000;state.rest.total+=15;renderRest();} break;
-    case 'rest-minus': if(state.rest){state.rest.end-=15000;renderRest();} break;
+    case 'rest-edit': openRestEditor(); break;
+    case 'rest-def-minus': setRestDefault(restDefault()-15); break;
+    case 'rest-def-plus': setRestDefault(restDefault()+15); break;
+    case 're-minus': restEdit=clamp(restEdit-15,15,1800); renderRestEditor(); break;
+    case 're-plus': restEdit=clamp(restEdit+15,15,1800); renderRestEditor(); break;
+    case 're-set': restEdit=+t.getAttribute('data-v'); renderRestEditor(); break;
+    case 're-save': {
+      var mi=document.querySelector('[data-act="re-min"]'),se=document.querySelector('[data-act="re-sec"]');
+      var v=(parseInt(mi&&mi.value,10)||0)*60+(parseInt(se&&se.value,10)||0);
+      setRestDefault(v||restEdit);closeSheet();toast('Descanso: '+fmtClock(restDefault()*1000));break;
+    }
+    case 'rest-plus': if(state.rest){state.rest.end+=15000;state.rest.total+=15;saveRest();renderRest();} break;
+    case 'rest-minus': if(state.rest){state.rest.end=Math.max(Date.now(),state.rest.end-15000);saveRest();renderRest();} break;
     case 'rest-skip': endRest(false); break;
     case 'open-sess': openSessionDetail(id); break;
     case 'del-sess': {
@@ -1397,8 +1440,7 @@ document.addEventListener('input',function(ev){
 document.addEventListener('change',function(ev){
   var t=ev.target.closest?ev.target.closest('[data-act]'):null;if(!t)return;
   var a=t.getAttribute('data-act');
-  if(a==='set-rest'){state.db.settings.rest=parseInt(t.value,10);state.db.settingsAt=Date.now();markDirty();}
-  else if(a==='set-sound'){state.db.settings.sound=t.checked;state.db.settingsAt=Date.now();markDirty();if(t.checked)chime();}
+  if(a==='set-sound'){state.db.settings.sound=t.checked;state.db.settingsAt=Date.now();markDirty();if(t.checked)chime();}
   else if(a==='set-theme'){state.db.settings.theme=t.value;state.db.settingsAt=Date.now();applyTheme();markDirty();}
   else if(a==='pick-ex'){state.progressEx=t.value;render();}
 });
@@ -1454,6 +1496,14 @@ function boot(){
   try{var av=localStorage.getItem(LS_ACTIVE);if(av){state.active=JSON.parse(av);normalizeActive();}}catch(e){}
   try{var v=localStorage.getItem(LS_VIEW);if(v)state.view=v;}catch(e){}
   if(state.view==='sesion'&&!state.active)state.view='hoy';
+  if(!state.db.settings.rest)state.db.settings.rest=120;
+  /* Si recargás o el teléfono descarta la pestaña, el descanso sigue corriendo. */
+  try{
+    var rr=localStorage.getItem(LS_REST);
+    if(rr){var pr=JSON.parse(rr);
+      if(pr&&pr.end>Date.now()){state.rest=pr;clearInterval(state.restT);state.restT=setInterval(tickRest,250);}
+      else localStorage.removeItem(LS_REST);}
+  }catch(e){}
   applyTheme();
   render();
   initCloud();
