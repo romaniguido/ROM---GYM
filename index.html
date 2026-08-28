@@ -76,7 +76,7 @@ h1,h2,h3,h4{margin:0;font-family:'Archivo',system-ui,sans-serif;font-weight:700;
 .brand-mark{width:34px;height:34px;flex:none;border-radius:9px;background:var(--ink);display:block}
 .brand-name{font-family:'Archivo',sans-serif;font-weight:800;font-size:19px;letter-spacing:-.03em;line-height:1;white-space:nowrap}
 .brand-name em{font-style:normal;color:var(--accent-2)}
-.brand-sub{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-top:2px}
+.brand-sub{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-top:2px;white-space:nowrap}
 .spacer{flex:1}
 
 .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);
@@ -172,7 +172,7 @@ h1,h2,h3,h4{margin:0;font-family:'Archivo',system-ui,sans-serif;font-weight:700;
 .prev{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-3);background:var(--surface-2);
   border:1px dashed var(--line-2);border-radius:8px;height:42px;display:flex;align-items:center;justify-content:center;padding:0 4px;
   white-space:nowrap;overflow:hidden}
-.prev.empty{border-style:solid;border-color:transparent;background:transparent}
+.prev.none{border-style:solid;border-color:transparent;background:transparent}
 .inp{width:100%;height:42px;border-radius:9px;border:1px solid var(--line-2);background:var(--surface-2);
   text-align:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:16px;padding:0 2px;min-width:0}
 .inp::placeholder{color:var(--ink-3);font-weight:500;opacity:.65}
@@ -199,6 +199,13 @@ h1,h2,h3,h4{margin:0;font-family:'Archivo',system-ui,sans-serif;font-weight:700;
 .rest-time{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:20px;font-variant-numeric:tabular-nums;line-height:1}
 .rest-btn{border:1px solid color-mix(in srgb,var(--invert-fg) 30%,transparent);border-radius:8px;height:32px;padding:0 9px;
   font-size:12.5px;font-weight:700;color:var(--invert-fg)}
+/* Estado en reposo: barra discreta que arranca el descanso cuando la tocás. */
+.rest-inner.idle{background:var(--surface);color:var(--ink-2);border-color:var(--line-2);
+  width:100%;text-align:left;padding:10px 13px}
+.rest-inner.idle .rest-label{opacity:1;color:var(--ink-3)}
+.rest-idle-time{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums}
+.rest-play{width:26px;height:26px;flex:none;border-radius:50%;background:var(--accent);display:grid;place-items:center}
+.rest-play svg{width:13px;height:13px;fill:var(--accent-ink);stroke:none;margin-left:2px}
 
 /* ---------- history ---------- */
 .hrow{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:var(--surface);
@@ -439,7 +446,7 @@ function renderSyncPill(){
   var el=document.getElementById('syncPill');if(!el)return;
   var cls,txt;
   if(state.cloud===undefined){cls='off';txt='Conectando';}
-  else if(!state.cloud){cls='off';txt='Este teléfono';}
+  else if(!state.cloud){cls='off';txt='Teléfono';}
   else if(state.dirty){cls='warn';txt='Sin guardar';}
   else{cls='ok';txt='Guardado';}
   el.innerHTML='<i class="dot '+cls+'"></i>'+txt;
@@ -537,7 +544,8 @@ var IC={
  trash:'<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>',
  dots:'<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/></svg>',
  up:'<svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
- down:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>'
+ down:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>',
+ play:'<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>'
 };
 var LOGO='<svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="9" fill="currentColor"/>'+
   '<g fill="var(--accent)"><rect x="6" y="18.4" width="28" height="3.2" rx="1.6"/>'+
@@ -551,6 +559,7 @@ function toast(msg){var el=document.getElementById('toast');if(!el)return;el.tex
 
 /* ============================== render: shell ============================== */
 function render(){
+  prevMemo={};
   var app=document.getElementById('app');
   if(state.view==='sesion'&&state.active){app.innerHTML=viewSession();afterSession();}
   else if(state.view==='hoy')app.innerHTML=topbar()+viewHoy();
@@ -638,8 +647,33 @@ function startFree(){
   state.active={id:uid(),routineId:null,name:'Entrenamiento libre',color:'var(--ink-3)',start:Date.now(),end:null,note:'',entries:[]};
   saveActive();state.view='sesion';render();openLibrary();
 }
+function blankSet(){return {w:'',r:'',done:false,wt:false,rt:false};}
+/* Sugerencia para cada serie: lo que escribiste más arriba manda; si no tocaste
+   nada, lo de la última vez que hiciste ese ejercicio, serie por serie.
+   Una serie que escribiste vos (wt/rt) corta la cascada: de ahí para abajo
+   sugiere ese valor, y a las de arriba no las toca. */
+function suggestions(e,prev){
+  var out=[],lw='',lr='',ps=(prev&&prev.sets)||[];
+  for(var j=0;j<e.sets.length;j++){
+    var s=e.sets[j],hp=ps[j]||ps[ps.length-1]||null;
+    out.push({
+      w: lw!=='' ? lw : (hp?fmtW(num(hp.w)||0):''),
+      r: lr!=='' ? lr : (hp&&num(hp.r)?String(num(hp.r)):'')
+    });
+    if(s.wt&&s.w!=='')lw=s.w;
+    if(s.rt&&s.r!=='')lr=s.r;
+  }
+  return out;
+}
+function phW(e,sug){return sug.w!=='' ? sug.w : (e.bw?'0':'kg');}
+function phR(e,sug){return sug.r!=='' ? sug.r : String(e.target.rmin);}
+var prevMemo={};
+function prevFor(name){
+  if(!(name in prevMemo))prevMemo[name]=lastPerformance(name,state.active&&state.active.id);
+  return prevMemo[name];
+}
 function newEntry(e){
-  var sets=[];for(var i=0;i<(e.sets||3);i++)sets.push({w:'',r:'',done:false});
+  var sets=[];for(var i=0;i<(e.sets||3);i++)sets.push(blankSet());
   return {exId:e.id||('e_'+slug(e.name)),name:e.name,muscle:e.muscle,bw:!!e.bw,uni:!!e.uni,
     target:{sets:e.sets||3,rmin:e.rmin||8,rmax:e.rmax||12},note:'',sets:sets};
 }
@@ -665,7 +699,7 @@ function viewSession(){
   return h;
 }
 function exerciseCard(e,i){
-  var prev=lastPerformance(e.name,state.active.id);
+  var prev=prevFor(e.name);
   var best=bestE1RM(e.name,state.active.editing?null:Date.now()+1);
   var h='<div class="ex" data-ex="'+i+'"><div class="ex-head"><div class="n"><b>'+esc(e.name)+'</b>'+
     '<div class="ex-meta"><span class="tag">'+esc(MUSCLE_LABEL[e.muscle]||e.muscle)+'</span>'+
@@ -674,7 +708,8 @@ function exerciseCard(e,i){
     (best.value?'<span class="tag">récord '+fmtW(best.value)+' kg est.</span>':'')+'</div></div>'+
     '<button class="iconbtn" data-act="ex-menu" data-i="'+i+'" aria-label="Opciones de '+esc(e.name)+'">'+IC.dots+'</button></div>';
   h+='<div class="sets"><div class="set-head"><span>#</span><span>Anterior</span><span>'+(e.bw?'+Kg':'Kg')+'</span><span>Reps</span><span></span></div>';
-  h+=e.sets.map(function(s,j){return setRow(e,i,s,j,prev);}).join('');
+  var sug=suggestions(e,prev);
+  h+=e.sets.map(function(s,j){return setRow(e,i,s,j,prev,sug[j]);}).join('');
   h+='<div class="setops"><button class="btn btn-ghost btn-sm" data-act="add-set" data-i="'+i+'">+ Serie</button>'+
      '<button class="btn btn-ghost btn-sm" data-act="del-set" data-i="'+i+'">− Serie</button>'+
      '<button class="btn btn-ghost btn-sm" data-act="toggle-note" data-i="'+i+'">Nota</button></div>';
@@ -682,16 +717,33 @@ function exerciseCard(e,i){
   h+='</div></div>';
   return h;
 }
-function setRow(e,i,s,j,prev){
+function setRow(e,i,s,j,prev,sug){
   var p=prev&&prev.sets[j];
   var ptxt=p?(fmtW(num(p.w)||0)+(e.bw?'+':'')+'×'+(num(p.r)||0)):'';
+  /* Un campo muestra valor propio si lo escribiste vos o si la serie ya está
+     hecha; si no, va vacío con la sugerencia en gris. */
+  var ownW=(s.wt||s.done),ownR=(s.rt||s.done);
   return '<div class="set-row'+(s.done?' done':'')+'" data-i="'+i+'" data-j="'+j+'">'+
     '<div class="set-n">'+(j+1)+(s.pr?'<span class="pr-chip" title="Récord personal" aria-label="Récord personal">★</span>':'')+'</div>'+
     (p?'<button class="prev" data-act="use-prev" data-i="'+i+'" data-j="'+j+'" data-w="'+esc(p.w)+'" data-r="'+esc(p.r)+'">'+ptxt+'</button>'
-      :'<div class="prev empty">—</div>')+
-    '<input class="inp" type="text" inputmode="decimal" data-act="set-w" data-i="'+i+'" data-j="'+j+'" value="'+esc(s.w)+'" placeholder="'+(p?fmtW(num(p.w)||0):(e.bw?'0':'kg'))+'" aria-label="Peso serie '+(j+1)+'">'+
-    '<input class="inp" type="text" inputmode="numeric" data-act="set-r" data-i="'+i+'" data-j="'+j+'" value="'+esc(s.r)+'" placeholder="'+(p?(num(p.r)||''):e.target.rmin)+'" aria-label="Repeticiones serie '+(j+1)+'">'+
+      :'<div class="prev none">—</div>')+
+    '<input class="inp" type="text" inputmode="decimal" data-act="set-w" data-i="'+i+'" data-j="'+j+'" value="'+(ownW?esc(s.w):'')+'" placeholder="'+esc(phW(e,sug))+'" aria-label="Peso serie '+(j+1)+'">'+
+    '<input class="inp" type="text" inputmode="numeric" data-act="set-r" data-i="'+i+'" data-j="'+j+'" value="'+(ownR?esc(s.r):'')+'" placeholder="'+esc(phR(e,sug))+'" aria-label="Repeticiones serie '+(j+1)+'">'+
     '<button class="chk" data-act="done" data-i="'+i+'" data-j="'+j+'" aria-label="Completar serie '+(j+1)+'" aria-pressed="'+(s.done?'true':'false')+'">'+IC.check+'</button></div>';
+}
+/* Al escribir en una serie, actualiza en gris las de abajo que todavía no tocaste.
+   Solo toca el placeholder, nunca el campo que estás usando: no se pierde el foco. */
+function refreshSuggestions(i){
+  var e=state.active.entries[i],card=$('.ex[data-ex="'+i+'"]');
+  if(!card)return;
+  var sug=suggestions(e,prevFor(e.name));
+  for(var j=0;j<e.sets.length;j++){
+    var s=e.sets[j],row=card.querySelector('.set-row[data-j="'+j+'"]');
+    if(!row)continue;
+    var wi=row.querySelector('[data-act="set-w"]'),ri=row.querySelector('[data-act="set-r"]');
+    if(wi&&wi!==document.activeElement&&!s.wt&&!s.done)wi.placeholder=phW(e,sug[j]);
+    if(ri&&ri!==document.activeElement&&!s.rt&&!s.done)ri.placeholder=phR(e,sug[j]);
+  }
 }
 function afterSession(){clearInterval(state.tickT);}
 function refreshSessHeader(){
@@ -706,22 +758,23 @@ function refreshSessHeader(){
 function toggleDone(i,j){
   var e=state.active.entries[i],s=e.sets[j];
   if(!s.done){
-    if(s.w===''&&s.r===''){
-      var row=$('.set-row[data-i="'+i+'"][data-j="'+j+'"]');
-      var wi=$('[data-act="set-w"]',row),ri=$('[data-act="set-r"]',row);
-      if(wi&&wi.placeholder&&wi.placeholder!=='kg')s.w=wi.placeholder;
-      if(ri&&ri.placeholder)s.r=ri.placeholder;
-    }
+    /* El ✓ toma lo que está sugerido en gris, campo por campo. */
+    var sug=suggestions(e,prevFor(e.name))[j];
+    if(!s.wt&&s.w==='')s.w=sug.w;
+    if(!s.rt&&s.r==='')s.r=phR(e,sug);
     if(num(s.r)==null){toast('Poné las repeticiones');return;}
+    if(!e.bw&&num(s.w)==null){toast('Poné el peso');return;}
     var before=bestE1RM(e.name,state.active.editing?state.active.start:null).value;
     var mine=e1rm(setWeight(e,s),num(s.r));
     s.done=true;s.ts=Date.now();
     s.pr=(before>0&&mine>before*1.0001);
-    // autocompletar la siguiente serie
-    var nx=e.sets[j+1];
-    if(nx&&!nx.done&&nx.w===''&&nx.r===''){nx.w=s.w;nx.r=s.r;}
     if(!state.active.editing){startRest();if(s.pr)toast('¡Récord en '+e.name+'!');}
-  }else{s.done=false;s.pr=false;}
+  }else{
+    s.done=false;s.pr=false;
+    /* Al desmarcar, lo que se había tomado del gris vuelve a gris. */
+    if(!s.wt)s.w='';
+    if(!s.rt)s.r='';
+  }
   saveActive();
   redrawExercise(i);refreshSessHeader();
 }
@@ -732,11 +785,12 @@ function redrawExercise(i){
 }
 
 /* ---------- descanso ---------- */
-function startRest(){
-  var d=state.db.settings.rest||120;if(!d)return;
+function startRest(dur){
+  var d=dur||state.db.settings.rest||0;if(!d)return;
   state.rest={end:Date.now()+d*1000,total:d};renderRest();
   clearInterval(state.restT);state.restT=setInterval(tickRest,250);
 }
+function restDefault(){return state.db.settings.rest||120;}
 function tickRest(){
   if(!state.rest)return;
   if(Date.now()>=state.rest.end){endRest(true);return;}
@@ -748,15 +802,24 @@ function endRest(beep){
 }
 function renderRest(){
   var el=document.getElementById('restBar');
-  if(!state.rest||state.view!=='sesion'){if(el)el.remove();return;}
-  var left=Math.max(0,state.rest.end-Date.now());
-  var pct=100-Math.min(100,left/(state.rest.total*1000)*100);
-  var html='<div class="rest" id="restBar"><div class="rest-inner">'+
-    '<div class="rest-bar" style="width:'+pct+'%"></div>'+
-    '<div style="flex:1"><div class="rest-label">Descanso</div><div class="rest-time">'+fmtClock(left)+'</div></div>'+
-    '<button class="rest-btn" data-act="rest-minus">−15s</button>'+
-    '<button class="rest-btn" data-act="rest-plus">+15s</button>'+
-    '<button class="rest-btn" data-act="rest-skip">Listo</button></div></div>';
+  if(state.view!=='sesion'||!state.active){if(el)el.remove();return;}
+  var html;
+  if(state.rest){
+    var left=Math.max(0,state.rest.end-Date.now());
+    var pct=100-Math.min(100,left/(state.rest.total*1000)*100);
+    html='<div class="rest" id="restBar"><div class="rest-inner">'+
+      '<div class="rest-bar" style="width:'+pct+'%"></div>'+
+      '<div style="flex:1"><div class="rest-label">Descanso</div><div class="rest-time">'+fmtClock(left)+'</div></div>'+
+      '<button class="rest-btn" data-act="rest-minus">−15s</button>'+
+      '<button class="rest-btn" data-act="rest-plus">+15s</button>'+
+      '<button class="rest-btn" data-act="rest-skip">Listo</button></div></div>';
+  }else{
+    html='<div class="rest" id="restBar">'+
+      '<button class="rest-inner idle" data-act="rest-start" aria-label="Empezar a contar el descanso">'+
+      '<span class="rest-play">'+IC.play+'</span>'+
+      '<span style="flex:1"><span class="rest-label" style="display:block">Descanso</span></span>'+
+      '<span class="rest-idle-time">'+fmtClock(restDefault()*1000)+'</span></button></div>';
+  }
   if(el)el.outerHTML=html;else document.body.insertAdjacentHTML('beforeend',html);
 }
 function vibrate(){try{if(navigator.vibrate)navigator.vibrate([120,70,120]);}catch(e){}}
@@ -1207,10 +1270,12 @@ document.addEventListener('click',function(ev){
     case 'minimize': state.view='hoy'; render(); break;
     case 'done': ev.preventDefault(); toggleDone(i,j); break;
     case 'use-prev': {
-      var e=state.active.entries[i];e.sets[j].w=t.getAttribute('data-w');e.sets[j].r=t.getAttribute('data-r');
+      var e=state.active.entries[i],st=e.sets[j];
+      st.w=t.getAttribute('data-w');st.r=t.getAttribute('data-r');
+      st.wt=(st.w!=='');st.rt=(st.r!=='');
       saveActive();redrawExercise(i);break;
     }
-    case 'add-set': state.active.entries[i].sets.push({w:'',r:'',done:false});saveActive();redrawExercise(i);refreshSessHeader();break;
+    case 'add-set': state.active.entries[i].sets.push(blankSet());saveActive();redrawExercise(i);refreshSessHeader();break;
     case 'del-set': {
       var ee=state.active.entries[i];
       if(ee.sets.length>1)ee.sets.pop();
@@ -1235,6 +1300,7 @@ document.addEventListener('click',function(ev){
     }
     case 'discard': discardSession(); break;
     case 'close-sheet': closeSheet(); break;
+    case 'rest-start': startRest(restDefault()); break;
     case 'rest-plus': if(state.rest){state.rest.end+=15000;state.rest.total+=15;renderRest();} break;
     case 'rest-minus': if(state.rest){state.rest.end-=15000;renderRest();} break;
     case 'rest-skip': endRest(false); break;
@@ -1246,7 +1312,7 @@ document.addEventListener('click',function(ev){
     }
     case 'edit-sess': {
       var s2=state.db.sessions.filter(function(x){return x.id===id;})[0];if(!s2)break;
-      state.active=JSON.parse(JSON.stringify(s2));state.active.editing=true;saveActive();closeSheet();
+      state.active=JSON.parse(JSON.stringify(s2));state.active.editing=true;normalizeActive();saveActive();closeSheet();
       state.view='sesion';render();break;
     }
     case 'repeat-sess': {
@@ -1319,8 +1385,9 @@ document.addEventListener('input',function(ev){
   var a=t.getAttribute('data-act'),i=+t.getAttribute('data-i'),j=+t.getAttribute('data-j');
   if(a==='set-w'||a==='set-r'){
     var e=state.active.entries[i],s=e.sets[j];
-    if(a==='set-w')s.w=t.value;else s.r=t.value;
-    saveActive();
+    if(a==='set-w'){s.w=t.value;s.wt=(t.value!=='');}
+    else{s.r=t.value;s.rt=(t.value!=='');}
+    saveActive();refreshSuggestions(i);
   }else if(a==='ex-note'){state.active.entries[i].note=t.value;saveActive();}
   else if(a==='sess-note'){state.active.note=t.value;saveActive();}
   else if(a==='set-bw'){state.db.settings.bodyweight=num(t.value)||0;state.db.settingsAt=Date.now();markDirty();}
@@ -1348,6 +1415,17 @@ document.addEventListener('click',function(ev){
   if(!o.hidden&&ev.target===o)closeSheet();
 });
 
+/* Sesiones guardadas antes de que existieran las banderas wt/rt: sus valores
+   cuentan como escritos a mano, así no se borran al desmarcar una serie. */
+function normalizeActive(){
+  if(!state.active)return;
+  (state.active.entries||[]).forEach(function(e){
+    (e.sets||[]).forEach(function(s){
+      if(s.wt===undefined)s.wt=(s.w!==''&&s.w!=null);
+      if(s.rt===undefined)s.rt=(s.r!==''&&s.r!=null);
+    });
+  });
+}
 function openDataSheet(){
   openSheet('Dónde se guardan tus datos',
     '<p style="margin:0 0 10px;color:var(--ink-2);font-size:14px;line-height:1.5">Todo se guarda en la memoria del navegador de este teléfono. No hace falta internet ni cuenta, pero los datos viven solo acá: si borrás los datos del navegador o desinstalás la app, se pierden.</p>'+
@@ -1373,7 +1451,7 @@ function boot(){
   if(!state.db.settings)state.db.settings={rest:120,bodyweight:75,sound:true,theme:'auto'};
   saveLocal();
   if(local&&cloud&&JSON.stringify(local)!==JSON.stringify(state.db))state.dirty=true;
-  try{var av=localStorage.getItem(LS_ACTIVE);if(av)state.active=JSON.parse(av);}catch(e){}
+  try{var av=localStorage.getItem(LS_ACTIVE);if(av){state.active=JSON.parse(av);normalizeActive();}}catch(e){}
   try{var v=localStorage.getItem(LS_VIEW);if(v)state.view=v;}catch(e){}
   if(state.view==='sesion'&&!state.active)state.view='hoy';
   applyTheme();
