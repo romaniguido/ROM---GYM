@@ -1,5 +1,5 @@
 /* ROM GYM — service worker: la app queda disponible sin internet. */
-var CACHE = 'romgym-v4';
+var CACHE = 'romgym-v5';
 var EJERCICIOS = [
   '01-prensa', '02-curl-femoral-sentado', '03-sentadilla-smith', '04-zancadas',
   '05-extension-cuadriceps', '06-gemelos-de-pie', '07-aductores', '08-bulgara',
@@ -17,7 +17,7 @@ var ASSETS = [
 ].concat(EJERCICIOS.map(function (n) { return './img/ej/' + n + '.png'; }));
 
 self.addEventListener('install', function (e) {
-  /* Uno por uno: si una figura falla, no se cae toda la instalación. */
+  /* Uno por uno: si una figura falla, no se cae toda la instalacion. */
   e.waitUntil(
     caches.open(CACHE)
       .then(function (c) {
@@ -44,14 +44,14 @@ self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
 
-  /* Las llamadas vivas a la nube y al login siempre van a la red. El SDK de
-     Firebase (gstatic, con la versión en la URL) sí se guarda, para que la
-     app pueda abrir sin señal. */
+  /* Las llamadas vivas a la nube y todo el flujo de login van siempre a la
+     red. El SDK de Firebase (gstatic, con la version en la URL) si se guarda,
+     para que la app pueda abrir sin senal. */
   var url = req.url;
   if (url.indexOf('googleapis.com') >= 0 || url.indexOf('accounts.google.com') >= 0 ||
       url.indexOf('firebaseio.com') >= 0 || url.indexOf('firebaseapp.com') >= 0) return;
 
-  /* La página: primero la red, con la copia guardada como respaldo. */
+  /* La pagina: primero la red, con la copia guardada como respaldo. */
   if (req.mode === 'navigate') {
     e.respondWith(
       fetch(req)
@@ -67,7 +67,7 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  /* Todo lo demás (figuras, tipografías, SDK): primero la copia guardada. */
+  /* Todo lo demas (figuras, tipografias, SDK): primero la copia guardada. */
   e.respondWith(
     caches.match(req).then(function (hit) {
       if (hit) return hit;
