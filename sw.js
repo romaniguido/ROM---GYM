@@ -1,15 +1,30 @@
 /* ROM GYM — service worker: la app queda disponible sin internet. */
-var CACHE = 'romgym-v3';
+var CACHE = 'romgym-v4';
+var EJERCICIOS = [
+  '01-prensa', '02-curl-femoral-sentado', '03-sentadilla-smith', '04-zancadas',
+  '05-extension-cuadriceps', '06-gemelos-de-pie', '07-aductores', '08-bulgara',
+  '09-peso-muerto-rumano-mancuernas', '10-hip-thrust', '11-press-inclinado',
+  '12-curl-biceps-barra', '13-press-plano', '14-curl-predicador', '15-mariposas-pec-deck',
+  '16-flexiones', '17-dominadas', '18-extension-triceps-polea', '19-remo-sentado',
+  '20-fondos', '21-jalon-al-pecho', '22-pushdown-triceps', '23-face-pull',
+  '24-press-hombros-mancuernas', '25-elevaciones-laterales', '26-reverse-pec-deck',
+  '27-plancha', '28-crunch', '29-abdominal-con-rueda', '30-elevaciones-de-piernas'
+];
 var ASSETS = [
   './', './index.html', './manifest.webmanifest', './icon.svg', './icon-maskable.svg',
   './img/01-piernas-a.png', './img/02-piernas-b.png', './img/03-pecho-y-biceps.png',
   './img/04-espalda-y-triceps.png', './img/05-hombros.png', './img/06-abdomen.png'
-];
+].concat(EJERCICIOS.map(function (n) { return './img/ej/' + n + '.png'; }));
 
 self.addEventListener('install', function (e) {
+  /* Uno por uno: si una figura falla, no se cae toda la instalación. */
   e.waitUntil(
     caches.open(CACHE)
-      .then(function (c) { return c.addAll(ASSETS); })
+      .then(function (c) {
+        return Promise.all(ASSETS.map(function (u) {
+          return c.add(u).catch(function () {});
+        }));
+      })
       .catch(function () {})
       .then(function () { return self.skipWaiting(); })
   );

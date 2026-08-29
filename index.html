@@ -301,8 +301,12 @@ h1,h2,h3{margin:0;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
 .drow .tx small{font-size:11.5px;color:var(--ink-3);font-weight:600}
 .mini{width:34px;height:34px;flex:none;border-radius:10px;background:var(--card-2);display:grid;place-items:center}
 .mini svg{width:16px;height:16px;stroke:var(--ink-3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-/* Figuras anatómicas: llenan su contenedor circular. */
+/* Figuras anatómicas: se agrandan un poco porque el PNG trae mucho margen. */
 .fig{width:118%;height:118%;object-fit:contain;display:block;margin:-9%;pointer-events:none}
+/* Las de ejercicio ya vienen ajustadas: entran tal cual, sin desbordar. */
+.fig-ej{width:100%;height:100%;margin:0}
+.th,.circ{overflow:hidden}
+.tile .circ{overflow:visible}
 
 /* ---------- cuenta y amigos ---------- */
 .av{border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;
@@ -482,6 +486,53 @@ var FIG_MUSCULO={cuadriceps:'01-piernas-a',aductores:'01-piernas-a',
 function bodySVG(muscles,rid){
   var f=(rid&&FIG_RUTINA[rid])||FIG_MUSCULO[(muscles||[])[0]]||'03-pecho-y-biceps';
   return '<img class="fig" src="img/'+f+'.png" alt="" loading="lazy" decoding="async">';
+}
+/* Cada ejercicio tiene su propia figura; los que no, caen en la del músculo. */
+var FIG_EJERCICIO={
+ 'prensa':'01-prensa',
+ 'curl-femoral-sentado':'02-curl-femoral-sentado',
+ 'sentadilla-en-smith':'03-sentadilla-smith',
+ 'sentadilla-en-smith-barra-guiada':'03-sentadilla-smith',
+ 'zancadas':'04-zancadas',
+ 'zancadas-estocadas':'04-zancadas',
+ 'extension-de-cuadriceps':'05-extension-cuadriceps',
+ 'gemelos-de-pie':'06-gemelos-de-pie',
+ 'aductores':'07-aductores',
+ 'bulgara':'08-bulgara',
+ 'peso-muerto-rumano-con-mancuernas':'09-peso-muerto-rumano-mancuernas',
+ 'hip-thrust':'10-hip-thrust',
+ 'press-inclinado':'11-press-inclinado',
+ 'curl-de-biceps-con-barra':'12-curl-biceps-barra',
+ 'press-plano':'13-press-plano',
+ 'curl-predicador':'14-curl-predicador',
+ 'mariposas-pec-deck':'15-mariposas-pec-deck',
+ 'flexiones':'16-flexiones',
+ 'dominadas':'17-dominadas',
+ 'extension-de-triceps-en-polea':'18-extension-triceps-polea',
+ 'extension-de-triceps-sobre-la-cabeza-en-polea':'18-extension-triceps-polea',
+ 'remo-sentado':'19-remo-sentado',
+ 'fondos':'20-fondos',
+ 'jalon-al-pecho':'21-jalon-al-pecho',
+ 'pushdown-de-triceps':'22-pushdown-triceps',
+ 'triceps-en-polea-pushdown':'22-pushdown-triceps',
+ 'face-pull':'23-face-pull',
+ 'press-de-hombros-con-mancuernas':'24-press-hombros-mancuernas',
+ 'elevaciones-laterales':'25-elevaciones-laterales',
+ 'reverse-pec-deck':'26-reverse-pec-deck',
+ 'reverse-pec-deck-pajaros':'26-reverse-pec-deck',
+ 'plancha':'27-plancha',
+ 'crunch':'28-crunch',
+ 'crunch-en-polea':'28-crunch',
+ 'crunch-en-polea-con-peso':'28-crunch',
+ 'abdominal-con-rueda':'29-abdominal-con-rueda',
+ 'rueda-abdominal':'29-abdominal-con-rueda',
+ 'elevaciones-de-piernas':'30-elevaciones-de-piernas',
+ 'elevacion-de-piernas':'30-elevaciones-de-piernas'
+};
+function figEj(e){
+  var f=FIG_EJERCICIO[slug(e.name||'')];
+  if(!f)return bodySVG([e.muscle]);
+  return '<img class="fig fig-ej" src="img/ej/'+f+'.png" alt="" loading="lazy" decoding="async">';
 }
 function half(s){return s+'<g transform="translate(120,0) scale(-1,1)">'+s+'</g>';}
 /* Silueta del cuerpo, entera y conectada. Los músculos se recortan contra ella. */
@@ -986,7 +1037,7 @@ function vPreview(){
     '</div></div>';
   h+='<div class="sec"><h2>Plan de hoy</h2></div><div class="card">'+r.ex.map(function(e){
     var lp=lastPerf(e.name);
-    return '<div class="plan"><span class="th">'+bodySVG([e.muscle])+'</span>'+
+    return '<div class="plan"><span class="th">'+figEj(e)+'</span>'+
       '<span class="tx"><b>'+esc(e.name)+'</b><span>'+(lp?fmtW(num(lp.sets[0].w)||0)+' kg la última vez':MUS[e.muscle])+'</span></span>'+
       '<span class="rp">'+e.sets+'×'+e.rmin+'-'+e.rmax+'</span></div>';
   }).join('')+'</div>';
@@ -1019,7 +1070,7 @@ function vSession(){
 }
 function exCard(e,i){
   var prev=lastPerf(e.name,state.active.id),b=best(e.name,state.active.editing?null:Date.now()+1);
-  var h='<div class="ex" data-ex="'+i+'"><div class="ex-h"><span class="th">'+bodySVG([e.muscle])+'</span>'+
+  var h='<div class="ex" data-ex="'+i+'"><div class="ex-h"><span class="th">'+figEj(e)+'</span>'+
     '<span class="tx"><b>'+esc(e.name)+'</b><span>'+MUS[e.muscle]+' · '+e.target.sets+'×'+e.target.rmin+'-'+e.target.rmax+
     (e.uni?' · por lado':'')+(b.value?' · récord '+fmtW(b.value)+' kg':'')+'</span></span>'+
     '<button class="dots" data-a="exmenu" data-i="'+i+'" aria-label="Opciones">'+I.dots+'</button></div>';
@@ -1218,7 +1269,7 @@ function openSess(id){
     var dn=(e.sets||[]).filter(function(x){return x.done;});
     if(!dn.length)return '';
     return '<div class="card" style="margin-bottom:10px;padding:14px"><div class="row" style="gap:11px">'+
-      '<span class="th" style="width:38px;height:38px;flex:none;border-radius:50%;background:var(--card-2);display:grid;place-items:center">'+bodySVG([e.muscle])+'</span>'+
+      '<span class="th" style="width:38px;height:38px;flex:none;border-radius:50%;background:var(--card-2);display:grid;place-items:center">'+figEj(e)+'</span>'+
       '<b style="font-size:14.5px;font-weight:700">'+esc(e.name)+'</b></div>'+
       '<div class="setl">'+dn.map(function(x){return '<span>'+(num(x.r)||0)+' × '+fmtW(num(x.w)||0)+(e.bw?'+':'')+' kg'+(x.pr?' ★':'')+'</span>';}).join('')+'</div>'+
       (e.note?'<div style="font-size:12.5px;color:var(--ink-3);margin-top:8px;font-weight:500">'+esc(e.note)+'</div>':'')+'</div>';
@@ -1405,7 +1456,7 @@ function editRoutine(id){
     '<div class="fld"><label>Descripción</label><input type="text" data-a="rs" data-id="'+r.id+'" value="'+esc(r.subtitle||'')+'"></div>'+
     '<div class="sec" style="margin-top:8px"><h2>Ejercicios</h2></div>'+
     r.ex.map(function(e,i){
-      return '<div class="drow"><span class="th" style="width:38px;height:38px;flex:none;border-radius:50%;background:var(--card-2);display:grid;place-items:center">'+bodySVG([e.muscle])+'</span>'+
+      return '<div class="drow"><span class="th" style="width:38px;height:38px;flex:none;border-radius:50%;background:var(--card-2);display:grid;place-items:center">'+figEj(e)+'</span>'+
         '<span class="tx"><b>'+esc(e.name)+'</b><small>'+e.sets+' × '+e.rmin+'-'+e.rmax+'</small></span>'+
         '<button class="mini" data-a="ru" data-id="'+r.id+'" data-i="'+i+'" aria-label="Subir">'+I.up+'</button>'+
         '<button class="mini" data-a="rd" data-id="'+r.id+'" data-i="'+i+'" aria-label="Bajar">'+I.dn+'</button>'+
@@ -1450,7 +1501,7 @@ function openLib(rid){
     var a=rid?'rpick':'lpick';
     var h=l.map(function(e){
       return '<button class="li" data-a="'+a+'"'+(rid?' data-id="'+rid+'"':'')+' data-n="'+esc(e.name)+'" data-m="'+esc(e.muscle)+'" data-bw="'+(e.bw?1:0)+'" data-u="'+(e.uni?1:0)+'">'+
-        '<span class="th">'+bodySVG([e.muscle])+'</span><b>'+esc(e.name)+'</b><small>'+MUS[e.muscle]+'</small></button>';
+        '<span class="th">'+figEj(e)+'</span><b>'+esc(e.name)+'</b><small>'+MUS[e.muscle]+'</small></button>';
     }).join('');
     if(q.value.trim())h+='<button class="li" data-a="'+a+'"'+(rid?' data-id="'+rid+'"':'')+' data-n="'+esc(q.value.trim())+'" data-m="pecho" data-bw="0" data-u="0"><span class="th">'+bodySVG([])+'</span><b>Crear «'+esc(q.value.trim())+'»</b><small>nuevo</small></button>';
     $('#ql').innerHTML=h||'<div class="empty"><p>Nada encontrado</p></div>';
