@@ -302,7 +302,7 @@ var MUSCLE_LABEL={cuadriceps:'Cuádriceps',femorales:'Femorales',gluteos:'Glúte
 var MUSCLE_ORDER=['pecho','espalda','hombros','biceps','triceps','cuadriceps','femorales','gluteos','gemelos','aductores','abdomen'];
 
 function ex(name,muscle,sets,rmin,rmax,opt){opt=opt||{};return{id:'e_'+slug(name),name:name,muscle:muscle,sets:sets,rmin:rmin,rmax:rmax,
-  bw:!!opt.bw,uni:!!opt.uni,optional:!!opt.optional};}
+  bw:!!opt.bw,uni:!!opt.uni,time:!!opt.time,optional:!!opt.optional};}
 var RE_DIACRITIC=new RegExp('['+String.fromCharCode(768)+'-'+String.fromCharCode(879)+']','g');
 function slug(s){return String(s).toLowerCase().normalize('NFD').replace(RE_DIACRITIC,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
 
@@ -343,9 +343,10 @@ function seedRoutines(){return [
    ex('Elevaciones laterales','hombros',4,12,20),
    ex('Reverse Pec Deck / Pájaros','hombros',3,12,20)]},
  {id:'r_abdomen',name:'Abdomen',subtitle:'2 veces por semana',color:'var(--r6)',ex:[
-   ex('Crunch en polea con peso','abdomen',3,8,15),
-   ex('Reverse Crunch','abdomen',3,10,15,{bw:true}),
-   ex('Flexión lateral en polea','abdomen',2,10,20,{uni:true})]}
+   ex('Plancha','abdomen',3,30,60,{bw:true,time:true}),
+   ex('Crunch','abdomen',3,10,20,{bw:true}),
+   ex('Abdominal con rueda','abdomen',3,8,15,{bw:true}),
+   ex('Elevaciones de piernas','abdomen',3,10,15,{bw:true})]}
 ];}
 
 var EXTRA_LIB=[
@@ -388,8 +389,24 @@ function relDays(ts){var d=Math.round((dayStart(Date.now())-dayStart(ts))/864000
 var LS_DB='romgym.db.v1', LS_ACTIVE='romgym.active.v1', LS_VIEW='romgym.view.v1', LS_REST='romgym.rest.v1';
 var state={db:null,active:null,view:'hoy',cloud:undefined,dirty:false,rest:null,tickT:null,restT:null,progressEx:null,histOpen:null};
 
-function blankDb(){return{v:1,routines:seedRoutines(),routinesAt:0,sessions:[],deleted:[],
+var SEED_V=2;
+function blankDb(){return{v:1,seedV:SEED_V,routines:seedRoutines(),routinesAt:0,sessions:[],deleted:[],
   settings:{rest:120,bodyweight:75,sound:true,theme:'auto'},settingsAt:0};}
+
+/* Las rutinas quedan guardadas en el dispositivo, así que un cambio en las de
+   fábrica no llega solo: hay que migrarlo. Sólo pisa lo que no tocaste vos. */
+function migrar(){
+  if((state.db.seedV||1)>=SEED_V)return;
+  var viejoAbdomen=['Crunch en polea con peso','Crunch en polea','Reverse Crunch',
+                    'Flexión lateral en polea','Flexion lateral en polea'];
+  var r=(state.db.routines||[]).filter(function(x){return x.id==='r_abdomen';})[0];
+  if(r&&r.ex.every(function(e){return viejoAbdomen.indexOf(e.name)>=0;})){
+    r.ex=seedRoutines().filter(function(x){return x.id==='r_abdomen';})[0].ex;
+    state.db.routinesAt=Date.now();
+  }
+  state.db.seedV=SEED_V;
+  markDirty();
+}
 
 function loadLocal(){try{var raw=localStorage.getItem(LS_DB);return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function loadCloud(){try{var el=document.getElementById('cloud');if(!el)return null;var d=JSON.parse(el.textContent||'{}');
@@ -676,7 +693,7 @@ function prevFor(name){
 }
 function newEntry(e){
   var sets=[];for(var i=0;i<(e.sets||3);i++)sets.push(blankSet());
-  return {exId:e.id||('e_'+slug(e.name)),name:e.name,muscle:e.muscle,bw:!!e.bw,uni:!!e.uni,
+  return {exId:e.id||('e_'+slug(e.name)),name:e.name,muscle:e.muscle,bw:!!e.bw,uni:!!e.uni,time:!!e.time,
     target:{sets:e.sets||3,rmin:e.rmin||8,rmax:e.rmax||12},note:'',sets:sets};
 }
 function viewSession(){
@@ -709,7 +726,7 @@ function exerciseCard(e,i){
     (e.uni?'<span class="tag">por lado</span>':'')+(e.bw?'<span class="tag">peso corporal</span>':'')+
     (best.value?'<span class="tag">récord '+fmtW(best.value)+' kg est.</span>':'')+'</div></div>'+
     '<button class="iconbtn" data-act="ex-menu" data-i="'+i+'" aria-label="Opciones de '+esc(e.name)+'">'+IC.dots+'</button></div>';
-  h+='<div class="sets"><div class="set-head"><span>#</span><span>Anterior</span><span>'+(e.bw?'+Kg':'Kg')+'</span><span>Reps</span><span></span></div>';
+  h+='<div class="sets"><div class="set-head"><span>#</span><span>Anterior</span><span>'+(e.bw?'+Kg':'Kg')+'</span><span>'+(e.time?'Seg':'Reps')+'</span><span></span></div>';
   var sug=suggestions(e,prev);
   h+=e.sets.map(function(s,j){return setRow(e,i,s,j,prev,sug[j]);}).join('');
   h+='<div class="setops"><button class="btn btn-ghost btn-sm" data-act="add-set" data-i="'+i+'">+ Serie</button>'+
@@ -1497,6 +1514,7 @@ function boot(){
   try{var v=localStorage.getItem(LS_VIEW);if(v)state.view=v;}catch(e){}
   if(state.view==='sesion'&&!state.active)state.view='hoy';
   if(!state.db.settings.rest)state.db.settings.rest=120;
+  migrar();
   /* Si recargás o el teléfono descarta la pestaña, el descanso sigue corriendo. */
   try{
     var rr=localStorage.getItem(LS_REST);
