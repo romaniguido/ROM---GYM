@@ -355,7 +355,14 @@ h1,h2,h3{margin:0;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
      Mientras esté en null, la app funciona igual pero sin cuentas:
      todo queda guardado en este dispositivo.                       -->
 <script>
-window.RG_FIREBASE_CONFIG = null;
+window.RG_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAtz0Vy8sOQ4JbZp3vQFs7rimK2tcZSG4c",
+  authDomain: "rom-gym.firebaseapp.com",
+  projectId: "rom-gym",
+  storageBucket: "rom-gym.firebasestorage.app",
+  messagingSenderId: "936952150854",
+  appId: "1:936952150854:web:bd37a4b46c365e01dd4347"
+};
 </script>
 
 <!-- ================== capa de cuentas y amigos ================== -->
@@ -602,7 +609,8 @@ function rel(t){var d=Math.round((dayStart(Date.now())-dayStart(t))/86400000);
   if(d<14)return 'hace 1 semana';if(d<60)return 'hace '+Math.round(d/7)+' semanas';return 'hace '+Math.round(d/30)+' meses';}
 
 /* ====================== estado ====================== */
-var LS_DB='romgym.db.v1',LS_AC='romgym.active.v1',LS_VW='romgym.view.v1',LS_RS='romgym.rest.v1',LS_NL='romgym.nologin.v1';
+var LS_DB='romgym.db.v1',LS_AC='romgym.active.v1',LS_VW='romgym.view.v1',LS_RS='romgym.rest.v1',
+    LS_NL='romgym.nologin.v1',LS_UID='romgym.uid.v1';
 var state={db:null,active:null,view:'inicio',preview:null,dirty:false,rest:null,restT:null,tickT:null,progEx:null,
   cloud:null,user:null,people:{},sums:{}};
 
@@ -715,8 +723,11 @@ function vPortada(cargando){
 }
 function render(){
   var app=$('#app');
-  if(PIDE_CUENTA&&!state.user){
-    app.innerHTML=vPortada(!state.authReady);
+  /* Si la nube no carga (sin señal) pero ya iniciaste sesión antes, se entra
+     igual y se trabaja con los datos del teléfono. */
+  var pasoLibre=state.cloudFallo&&state.uidPrevio;
+  if(PIDE_CUENTA&&!state.user&&!pasoLibre){
+    app.innerHTML=vPortada(!state.authReady&&!state.cloudFallo);
     var tb=$('#tabs');if(tb)tb.remove();
     var rb=$('#rest');if(rb)rb.remove();
     return;
@@ -890,13 +901,22 @@ function loadFriends(){
 }
 window.addEventListener('rg-cloud-ready',function(){
   state.cloud=window.RGCloud||null;
-  if(!state.cloud){if(state.view==='amigos')render();else refreshHeader();return;}
+  if(!state.cloud){
+    state.cloudFallo=true;
+    if(PIDE_CUENTA&&state.uidPrevio)toast('Sin conexión: trabajás con los datos de este teléfono');
+    render();return;
+  }
   state.cloud.onUser(function(p){
     var eraOtro=(!!p)!==(!!state.user);
     state.user=p;state.authReady=true;state.people={};state.sums={};
-    if(p)pullCloud();
+    if(p){try{localStorage.setItem(LS_UID,p.uid);}catch(e){}state.uidPrevio=p.uid;pullCloud();}
     if(PIDE_CUENTA||eraOtro||state.view==='amigos')render();else refreshHeader();
   });
+  /* Si el SDK carga pero la sesión nunca resuelve (red caída), no dejamos la
+     portada colgada para siempre. */
+  setTimeout(function(){
+    if(!state.authReady){state.cloudFallo=true;render();}
+  },12000);
 });
 function refreshHeader(){
   var h=document.querySelector('.head');
@@ -1489,7 +1509,10 @@ document.addEventListener('click',function(ev){
     case 'amigos': state.view='amigos';render();break;
     case 'nologin': state.hideLogin=true;try{localStorage.setItem(LS_NL,'1');}catch(e){}render();break;
     case 'signin': state.cloud&&state.cloud.signIn().catch(function(e){toast('No se pudo entrar');});break;
-    case 'signout': state.cloud&&state.cloud.signOut().then(function(){state.user=null;render();toast('Sesión cerrada');});break;
+    case 'signout': state.cloud&&state.cloud.signOut().then(function(){
+      state.user=null;state.uidPrevio='';
+      try{localStorage.removeItem(LS_UID);}catch(e){}
+      render();toast('Sesión cerrada');});break;
     case 'copycode': {
       var c=state.user&&state.user.code||'';
       try{navigator.clipboard.writeText(c);toast('Código copiado: '+c);}catch(e){toast('Tu código es '+c);}
@@ -1693,6 +1716,7 @@ function boot(){
   try{var av=localStorage.getItem(LS_AC);if(av)state.active=JSON.parse(av);}catch(e){}
   try{var v=localStorage.getItem(LS_VW);if(v)state.view=v;}catch(e){}
   try{state.hideLogin=localStorage.getItem(LS_NL)==='1';}catch(e){}
+  try{state.uidPrevio=localStorage.getItem(LS_UID)||'';}catch(e){}
   if((state.view==='sesion'&&!state.active)||state.view==='preview'||state.view==='amigos')state.view='inicio';
   try{var rs=localStorage.getItem(LS_RS);if(rs){var p=JSON.parse(rs);
     if(p&&p.end>Date.now()){state.rest=p;clearInterval(state.restT);state.restT=setInterval(tickRest,250);}

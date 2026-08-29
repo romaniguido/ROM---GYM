@@ -1,5 +1,5 @@
 /* ROM GYM — service worker: la app queda disponible sin internet. */
-var CACHE = 'romgym-v2';
+var CACHE = 'romgym-v3';
 var ASSETS = [
   './', './index.html', './manifest.webmanifest', './icon.svg', './icon-maskable.svg',
   './img/01-piernas-a.png', './img/02-piernas-b.png', './img/03-pecho-y-biceps.png',
@@ -29,12 +29,14 @@ self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
 
-  /* Nunca tocar la nube ni el login: siempre a la red. */
+  /* Las llamadas vivas a la nube y al login siempre van a la red. El SDK de
+     Firebase (gstatic, con la versión en la URL) sí se guarda, para que la
+     app pueda abrir sin señal. */
   var url = req.url;
-  if (url.indexOf('firebase') >= 0 || url.indexOf('googleapis.com/identitytoolkit') >= 0 ||
-      url.indexOf('firestore') >= 0 || url.indexOf('accounts.google.com') >= 0) return;
+  if (url.indexOf('googleapis.com') >= 0 || url.indexOf('accounts.google.com') >= 0 ||
+      url.indexOf('firebaseio.com') >= 0 || url.indexOf('firebaseapp.com') >= 0) return;
 
-  /* La página: primero la red (para recibir actualizaciones), con la copia guardada como respaldo. */
+  /* La página: primero la red, con la copia guardada como respaldo. */
   if (req.mode === 'navigate') {
     e.respondWith(
       fetch(req)
@@ -50,7 +52,7 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  /* Todo lo demás (figuras y tipografías): primero la copia guardada. */
+  /* Todo lo demás (figuras, tipografías, SDK): primero la copia guardada. */
   e.respondWith(
     caches.match(req).then(function (hit) {
       if (hit) return hit;
