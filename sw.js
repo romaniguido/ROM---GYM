@@ -1,5 +1,5 @@
-/* ROM GYM — service worker: la app queda disponible sin internet. */
-var CACHE = 'romgym-v5';
+﻿/* ROM GYM â€” service worker: la app queda disponible sin internet. */
+var CACHE = 'romgym-v6';
 var EJERCICIOS = [
   '01-prensa', '02-curl-femoral-sentado', '03-sentadilla-smith', '04-zancadas',
   '05-extension-cuadriceps', '06-gemelos-de-pie', '07-aductores', '08-bulgara',

@@ -347,8 +347,20 @@ h1,h2,h3{margin:0;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
 .portada .gbtn{max-width:340px}
 .portada .pnote{margin-top:16px;font-size:12.5px;color:var(--ink-3);font-weight:500;line-height:1.5;max-width:22em}
 .portada .pload{font-size:14px;color:var(--ink-3);font-weight:600}
-.pwarn{margin-top:18px;max-width:340px;width:100%;background:var(--gold-soft);color:var(--gold);
-  border-radius:14px;padding:13px 15px;font-size:13px;font-weight:700;line-height:1.5;text-align:left}
+.pwarn{margin-top:18px;max-width:360px;width:100%;background:var(--gold-soft);color:var(--gold);
+  border-radius:14px;padding:13px 15px;font-size:12.5px;font-weight:700;line-height:1.5;text-align:left}
+.portada .pbox{width:100%;max-width:360px;background:var(--card);border-radius:20px;padding:16px;
+  box-shadow:var(--sh);text-align:left;margin-bottom:4px}
+.ptabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--card-2);border-radius:12px;padding:4px;margin-bottom:16px}
+.ptabs button{height:38px;border-radius:9px;font-size:14px;font-weight:700;color:var(--ink-3)}
+.ptabs button.on{background:var(--card);color:var(--ink);box-shadow:var(--sh)}
+.portada .fld input{box-shadow:none;background:var(--card-2)}
+.plink{display:block;width:100%;margin-top:10px;font-size:13px;font-weight:600;color:var(--ink-3)}
+.psep{display:flex;align-items:center;gap:12px;width:100%;max-width:360px;margin:18px 0 14px;color:var(--ink-3)}
+.psep::before,.psep::after{content:"";flex:1;height:1px;background:var(--line)}
+.psep span{font-size:12px;font-weight:700}
+.perr{width:100%;max-width:360px;background:var(--bad-soft);color:var(--bad);border-radius:12px;
+  padding:11px 14px;font-size:13px;font-weight:600;line-height:1.45;text-align:left;margin-top:12px}
 </style>
 </head>
 <body>
@@ -382,7 +394,8 @@ else {
   const { initializeApp } = await import(B + 'firebase-app.js');
   const { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence,
           browserPopupRedirectResolver, GoogleAuthProvider, signInWithPopup, getRedirectResult,
-          onAuthStateChanged, signOut } = await import(B + 'firebase-auth.js');
+          createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail,
+          updateProfile, onAuthStateChanged, signOut } = await import(B + 'firebase-auth.js');
   const { getFirestore, doc, getDoc, setDoc, updateDoc, deleteField, arrayUnion, arrayRemove,
           initializeFirestore, persistentLocalCache, persistentMultipleTabManager } = await import(B + 'firebase-firestore.js');
 
@@ -420,18 +433,22 @@ else {
     }
     return null;
   }
+  let nombrePendiente = null;
+  function nombreDe(user){
+    return user.displayName || nombrePendiente || (user.email || '').split('@')[0] || 'Sin nombre';
+  }
   async function ensureProfile(user){
     const ref = uDoc(user.uid), snap = await getDoc(ref);
     if (snap.exists()) {
       const d = snap.data();
       const patch = {};
-      if (d.name !== user.displayName) patch.name = user.displayName || 'Sin nombre';
+      if (!d.name || d.name === 'Sin nombre') patch.name = nombreDe(user);
       if (d.photo !== user.photoURL) patch.photo = user.photoURL || '';
       if (Object.keys(patch).length) await updateDoc(ref, patch);
       return { uid: user.uid, ...d, ...patch };
     }
     const code = await claimCode(user.uid);
-    const p = { name: user.displayName || 'Sin nombre', photo: user.photoURL || '',
+    const p = { name: nombreDe(user), photo: user.photoURL || '',
                 code: code || '', friends: [], requests: [], createdAt: Date.now() };
     await setDoc(ref, p);
     return { uid: user.uid, ...p };
@@ -453,6 +470,15 @@ else {
       prov.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, prov);
     },
+    /* Email y contraseña: funciona en cualquier navegador, incluido el
+       interno de WhatsApp, donde Google no permite su login. */
+    async crearCuenta(nombre, email, pass){
+      nombrePendiente = (nombre || '').trim() || null;
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+      if (nombrePendiente) { try { await updateProfile(cred.user, { displayName: nombrePendiente }); } catch (e) {} }
+    },
+    async entrarEmail(email, pass){ await signInWithEmailAndPassword(auth, email.trim(), pass); },
+    async recuperar(email){ await sendPasswordResetEmail(auth, email.trim()); },
     signOut(){ return signOut(auth); },
     async loadDb(uid){ const s = await getDoc(priv(uid)); return s.exists() ? (s.data().json ? JSON.parse(s.data().json) : null) : null; },
     saveDb(uid, dbObj){ return setDoc(priv(uid), { json: JSON.stringify(dbObj), at: Date.now() }); },
@@ -673,7 +699,7 @@ function rel(t){var d=Math.round((dayStart(Date.now())-dayStart(t))/86400000);
 var LS_DB='romgym.db.v1',LS_AC='romgym.active.v1',LS_VW='romgym.view.v1',LS_RS='romgym.rest.v1',
     LS_NL='romgym.nologin.v1',LS_UID='romgym.uid.v1';
 var state={db:null,active:null,view:'inicio',preview:null,dirty:false,rest:null,restT:null,tickT:null,progEx:null,
-  cloud:null,user:null,people:{},sums:{}};
+  cloud:null,user:null,people:{},sums:{},authMode:'entrar'};
 
 var SEED_V=2;
 function blankDb(){return{v:1,seedV:SEED_V,routines:seedRoutines(),routinesAt:0,sessions:[],deleted:[],
@@ -782,18 +808,33 @@ function esEmbebido(){
   return false;
 }
 function vPortada(cargando){
-  return '<div class="portada">'+
+  var emb=esEmbebido();
+  var crear=state.authMode==='crear';
+  var h='<div class="portada">'+
     '<div class="pmark">'+MARK+'</div>'+
     '<h1>ROM GYM</h1>'+
-    '<p>Anotá cada serie mientras entrenás, seguí tu progresión y mirá cómo van tus amigos.</p>'+
-    (cargando
-      ? '<div class="pload">Conectando…</div>'
-      : '<button class="gbtn" data-a="signin">'+GOOGLE+' Continuar con Google</button>'+
-        '<div class="pnote">Se crea tu cuenta la primera vez y la sesión queda abierta: no tenés que volver a entrar.</div>'+
-        (esEmbebido()
-          ? '<button class="pwarn" data-a="avisonav">Estás en el navegador de otra app. Tocá acá para ver cómo abrirlo bien.</button>'
-          : ''))+
+    '<p>Anotá cada serie mientras entrenás, seguí tu progresión y mirá cómo van tus amigos.</p>';
+  if(cargando)return h+'<div class="pload">Conectando…</div></div>';
+
+  h+='<div class="pbox">'+
+    '<div class="ptabs">'+
+      '<button class="'+(crear?'':'on')+'" data-a="modo" data-v="entrar">Entrar</button>'+
+      '<button class="'+(crear?'on':'')+'" data-a="modo" data-v="crear">Crear cuenta</button>'+
     '</div>';
+  if(crear)h+='<div class="fld"><label>Tu nombre</label><input type="text" id="au_nom" autocomplete="name" placeholder="Como te ven tus amigos"></div>';
+  h+='<div class="fld"><label>Email</label><input type="email" id="au_mail" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="tu@email.com"></div>'+
+    '<div class="fld" style="margin-bottom:10px"><label>Contraseña</label>'+
+    '<input type="password" id="au_pass" autocomplete="'+(crear?'new-password':'current-password')+'" placeholder="'+(crear?'Mínimo 6 caracteres':'Tu contraseña')+'"></div>'+
+    '<button class="btn btn-1 btn-w" data-a="'+(crear?'reg':'login')+'" style="min-height:52px">'+
+    (crear?'Crear mi cuenta':'Entrar')+'</button>'+
+    (crear?'':'<button class="plink" data-a="olvide">Olvidé mi contraseña</button>')+
+    '</div>';
+
+  h+='<div class="psep"><span>o</span></div>'+
+     '<button class="gbtn" data-a="signin">'+GOOGLE+' Continuar con Google</button>';
+  if(emb)h+='<button class="pwarn" data-a="avisonav">Google no permite su login dentro de WhatsApp. Usá email y contraseña acá arriba, o tocá para abrirlo en tu navegador.</button>';
+  h+='<div class="pnote">La sesión queda abierta: no tenés que volver a entrar cada vez.</div>';
+  return h+'</div>';
 }
 function render(){
   var app=$('#app');
@@ -1532,6 +1573,32 @@ function openLib(rid){
   q.addEventListener('input',paint);paint();
 }
 
+/* Muestra el error debajo del formulario, sin borrar lo que escribiste. */
+function errAuth(txt,ok){
+  var box=$('.perr');
+  if(!box){
+    var pb=$('.pbox');if(!pb)return;
+    pb.insertAdjacentHTML('afterend','<div class="perr"></div>');
+    box=$('.perr');
+  }
+  box.textContent=txt;
+  try{box.scrollIntoView({block:'nearest',behavior:'smooth'});}catch(e){}
+  box.style.background=ok?'var(--good-soft)':'var(--bad-soft)';
+  box.style.color=ok?'var(--good)':'var(--bad)';
+  var b=$('[data-a="login"],[data-a="reg"]');
+  if(b){b.disabled=false;b.textContent=(state.authMode==='crear')?'Crear mi cuenta':'Entrar';}
+}
+function msgAuth(c){
+  c=c||'';
+  if(/email-already-in-use/.test(c))return 'Ese email ya tiene cuenta. Tocá «Entrar» arriba.';
+  if(/invalid-email/.test(c))return 'Ese email no parece válido.';
+  if(/weak-password/.test(c))return 'La contraseña necesita al menos 6 caracteres.';
+  if(/wrong-password|user-not-found|invalid-credential|invalid-login/.test(c))return 'Email o contraseña incorrectos.';
+  if(/too-many-requests/.test(c))return 'Demasiados intentos. Esperá un minuto y probá de nuevo.';
+  if(/network-request-failed/.test(c))return 'Sin internet. Revisá la conexión.';
+  if(/operation-not-allowed/.test(c))return 'Falta habilitar email y contraseña en Firebase.';
+  return 'No se pudo. Probá de nuevo.';
+}
 /* Los navegadores internos (WhatsApp, Instagram) bloquean el login de Google. */
 function avisoNavegador(){
   sheet('Abrilo en tu navegador',
@@ -1546,7 +1613,7 @@ function avisoNavegador(){
     'Agregá la app a tu pantalla de inicio (botón compartir → «Agregar a inicio»). '+
     'Se abre como una app y la sesión te queda guardada.</p></div>',
     '<button class="btn btn-w" data-a="copiarlink">Copiar link</button>'+
-    '<button class="btn btn-1 btn-w" data-a="close">Entendido</button>');
+    '<button class="btn btn-1 btn-w" data-a="abrirnav">Abrir en el navegador</button>');
 }
 
 /* ---------- hoja ---------- */
@@ -1612,7 +1679,40 @@ document.addEventListener('click',function(ev){
       });
       break;
     }
+    case 'modo': state.authMode=t.getAttribute('data-v');render();break;
+    case 'login': case 'reg': {
+      if(!state.cloud){toast('Sin conexión con la nube');break;}
+      var mail=($('#au_mail')||{}).value||'',pass=($('#au_pass')||{}).value||'';
+      var nom=($('#au_nom')||{}).value||'';
+      if(!mail.trim()){errAuth('Escribí tu email');break;}
+      if(pass.length<6){errAuth('La contraseña necesita al menos 6 caracteres');break;}
+      if(a==='reg'&&!nom.trim()){errAuth('Poné tu nombre, es el que ven tus amigos');break;}
+      t.disabled=true;t.textContent=a==='reg'?'Creando…':'Entrando…';
+      var p=(a==='reg')?state.cloud.crearCuenta(nom,mail,pass):state.cloud.entrarEmail(mail,pass);
+      p.catch(function(e){errAuth(msgAuth(e&&e.code));});
+      break;
+    }
+    case 'olvide': {
+      var m=($('#au_mail')||{}).value||'';
+      if(!m.trim()){errAuth('Escribí tu email arriba y volvé a tocar acá');break;}
+      state.cloud.recuperar(m).then(function(){
+        errAuth('Te mandamos un mail para cambiar la contraseña. Revisá también el correo no deseado.',true);
+      }).catch(function(e){errAuth(msgAuth(e&&e.code));});
+      break;
+    }
     case 'avisonav': avisoNavegador();break;
+    case 'abrirnav': {
+      /* Intento salir del navegador embebido hacia el de verdad. */
+      var sinEsq=location.href.replace(/^https?:\/\//,'');
+      closeSheet();
+      try{
+        if(/android/i.test(navigator.userAgent))
+          location.href='intent://'+sinEsq+'#Intent;scheme=https;package=com.android.chrome;end';
+        else location.href='x-safari-https://'+sinEsq;
+      }catch(e){}
+      setTimeout(function(){toast('Si no se abrió, copiá el link y pegalo en Safari');},1500);
+      break;
+    }
     case 'copiarlink': {
       try{navigator.clipboard.writeText(location.href);toast('Link copiado');}
       catch(e){toast(location.href);}
